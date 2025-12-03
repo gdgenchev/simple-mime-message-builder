@@ -1,10 +1,10 @@
 # SimpleMimeMessageBuilder
 
-A utility class for declarative creation of email messages in Java Spring using Builder Pattern.
+A utility class for declarative creation of email messages in Java using Builder Pattern.
 
 ## Without `SimpleMimeMessageBuilder`
 
-When creating a `MimeMessage` manually, each part of the email must be set using MimeMessageHelper setter methods.
+When creating a `MimeMessage` manually, each part of the email must be set using MimeMessageHelper setter methods (for spring)
 
 ```java
 MimeMessage message = mailSender.createMimeMessage();
@@ -23,8 +23,7 @@ for (int i = 0; i < files.size(); i++) {
 
 ## With `SimpleMimeMessageBuilder`
 
-Using `SimpleMimeMessageBuilder`, you can create a message in a more declarative and easy way without working with the
-MimeMessageHelper setters directly.
+Using `SimpleMimeMessageBuilder`, you can create a message in a more declarative and easy way with no spring helpers (depends only on jakarta.mail)
 
 ```java
 MimeMessage message = new SimpleMimeMessageBuilder()

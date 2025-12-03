@@ -1,81 +1,112 @@
 package com.example.mimemessage;
 
+import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
+import jakarta.mail.Multipart;
+import jakarta.mail.Session;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
+
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import org.springframework.lang.NonNull;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.web.multipart.MultipartFile;
 
 public class SimpleMimeMessageBuilder {
 
     private static final String FALLBACK_FILENAME_PREFIX = "file_";
+    private static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
 
     private String from;
     private String subject;
     private String to;
     private String text;
     private boolean isHtml;
-    private List<MultipartFile> files;
+    private List<Attachment> attachments;
 
-    public SimpleMimeMessageBuilder withFrom(String from) {
+    public SimpleMimeMessageBuilder from(String from) {
         this.from = from;
         return this;
     }
 
-    public SimpleMimeMessageBuilder withSubject(String subject) {
+    public SimpleMimeMessageBuilder subject(String subject) {
         this.subject = subject;
         return this;
     }
 
-    public SimpleMimeMessageBuilder withTo(String to) {
+    public SimpleMimeMessageBuilder to(String to) {
         this.to = to;
         return this;
     }
 
-    public SimpleMimeMessageBuilder withText(String text) {
+    public SimpleMimeMessageBuilder text(String text) {
         this.text = text;
+        this.isHtml = false;
         return this;
     }
 
-    public SimpleMimeMessageBuilder withHtml(String html) {
+    public SimpleMimeMessageBuilder html(String html) {
         this.text = html;
         this.isHtml = true;
         return this;
     }
 
-    public SimpleMimeMessageBuilder withFiles(List<MultipartFile> files) {
-        this.files = files;
+    public SimpleMimeMessageBuilder attachments(List<Attachment> attachments) {
+        this.attachments = attachments;
         return this;
     }
 
-    public MimeMessage build(@NonNull JavaMailSender mailSender) throws MessagingException {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
+    public MimeMessage build(Session session) throws EmailServiceException {
+        MimeMessage message = new MimeMessage(session);
 
-        helper.setFrom(from);
-        helper.setSubject(subject);
-        helper.setTo(to);
-        helper.setText(text, isHtml);
+        try {
+            message.setFrom(new InternetAddress(from));
+            message.setRecipient(Message.RecipientType.TO, new InternetAddress(to));
+            message.setSubject(subject, StandardCharsets.UTF_8.name());
 
-        addAttachments(helper, files);
+            Multipart multipart = new MimeMultipart();
+            multipart.addBodyPart(createBodyPart());
+            addAttachments(multipart, attachments);
 
-        return message;
+            message.setContent(multipart);
+
+            return message;
+        } catch (MessagingException e) {
+            throw new EmailServiceException(e);
+        }
     }
 
-    private void addAttachments(MimeMessageHelper mimeMessageHelper, List<MultipartFile> files) throws MessagingException {
-        if (files == null) {
+    private MimeBodyPart createBodyPart() throws MessagingException {
+        MimeBodyPart bodyPart = new MimeBodyPart();
+        if (isHtml) {
+            bodyPart.setContent(text, "text/html; charset=UTF-8");
+        } else {
+            bodyPart.setText(text, StandardCharsets.UTF_8.name());
+        }
+        return bodyPart;
+    }
+
+    private void addAttachments(Multipart multipart, List<Attachment> attachments) throws MessagingException {
+        if (attachments == null) {
             return;
         }
 
-        for (int i = 0; i < files.size(); i++) {
-            MultipartFile file = files.get(i);
-            String originalFilename = file.getOriginalFilename();
-            originalFilename = originalFilename != null ? originalFilename : FALLBACK_FILENAME_PREFIX + i;
+        for (int i = 0; i < attachments.size(); i++) {
+            Attachment attachment = attachments.get(i);
+            if (attachment.content() == null || attachment.content().length == 0) {
+                continue;
+            }
 
-            mimeMessageHelper.addAttachment(originalFilename, file);
+            String filename = attachment.fileName();
+            if (filename == null || filename.isEmpty()) {
+                filename = FALLBACK_FILENAME_PREFIX + i;
+            }
+
+            MimeBodyPart attachmentPart = new MimeBodyPart();
+            attachmentPart.setContent(attachment.content(), APPLICATION_OCTET_STREAM);
+            attachmentPart.setFileName(filename);
+
+            multipart.addBodyPart(attachmentPart);
         }
     }
 }

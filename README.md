@@ -27,11 +27,11 @@ Using `SimpleMimeMessageBuilder`, you can create a message in a more declarative
 
 ```java
 MimeMessage message = new SimpleMimeMessageBuilder()
-    .withFrom("from@example.com")
-    .withTo("to@example.com")
-    .withSubject("Subject")
-    .withHtml("<h1>Email content</h1>") // or .withText("Email content")
-    .withFiles(files)
+    .from("from@example.com")
+    .to("to@example.com")
+    .subject("Subject")
+    .html("<h1>Email content</h1>") // or .text("Email content")
+    .attachments(attachments)
     .build(mailSender);
 ```
 

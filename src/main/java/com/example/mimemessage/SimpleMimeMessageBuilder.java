@@ -1,5 +1,7 @@
 package com.example.mimemessage;
 
+import jakarta.activation.DataHandler;
+import jakarta.activation.FileDataSource;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
@@ -8,21 +10,27 @@ import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
-
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 public class SimpleMimeMessageBuilder {
 
+    public record Attachment(String fileName, Path filePath) {
+
+    }
+
     private static final String FALLBACK_FILENAME_PREFIX = "file_";
-    private static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
 
     private String from;
     private String subject;
     private String to;
     private String text;
     private boolean isHtml;
-    private List<Attachment> attachments;
+    private List<Attachment> attachments = Collections.emptyList();
 
     public SimpleMimeMessageBuilder from(String from) {
         this.from = from;
@@ -52,28 +60,32 @@ public class SimpleMimeMessageBuilder {
     }
 
     public SimpleMimeMessageBuilder attachments(List<Attachment> attachments) {
-        this.attachments = attachments;
+        this.attachments = attachments != null ? Collections.unmodifiableList(attachments) : Collections.emptyList();
         return this;
     }
 
-    public MimeMessage build(Session session) throws EmailServiceException {
+    public MimeMessage build(Session session) throws MessagingException {
+        validateFields();
+
         MimeMessage message = new MimeMessage(session);
+        message.setFrom(new InternetAddress(from));
+        message.setRecipient(Message.RecipientType.TO, new InternetAddress(to));
+        message.setSubject(subject, StandardCharsets.UTF_8.name());
 
-        try {
-            message.setFrom(new InternetAddress(from));
-            message.setRecipient(Message.RecipientType.TO, new InternetAddress(to));
-            message.setSubject(subject, StandardCharsets.UTF_8.name());
+        Multipart multipart = new MimeMultipart();
+        multipart.addBodyPart(createBodyPart());
+        addAttachments(multipart, attachments);
 
-            Multipart multipart = new MimeMultipart();
-            multipart.addBodyPart(createBodyPart());
-            addAttachments(multipart, attachments);
+        message.setContent(multipart);
 
-            message.setContent(multipart);
+        return message;
+    }
 
-            return message;
-        } catch (MessagingException e) {
-            throw new EmailServiceException(e);
-        }
+    private void validateFields() {
+        Objects.requireNonNull(from, "Sender (from) must not be null");
+        Objects.requireNonNull(to, "Recipient (to) must not be null");
+        Objects.requireNonNull(subject, "Subject must not be null");
+        Objects.requireNonNull(text, "Message body must not be null");
     }
 
     private MimeBodyPart createBodyPart() throws MessagingException {
@@ -87,13 +99,10 @@ public class SimpleMimeMessageBuilder {
     }
 
     private void addAttachments(Multipart multipart, List<Attachment> attachments) throws MessagingException {
-        if (attachments == null) {
-            return;
-        }
-
         for (int i = 0; i < attachments.size(); i++) {
             Attachment attachment = attachments.get(i);
-            if (attachment.content() == null || attachment.content().length == 0) {
+
+            if (attachment.filePath() == null || !Files.exists(attachment.filePath())) {
                 continue;
             }
 
@@ -103,7 +112,7 @@ public class SimpleMimeMessageBuilder {
             }
 
             MimeBodyPart attachmentPart = new MimeBodyPart();
-            attachmentPart.setContent(attachment.content(), APPLICATION_OCTET_STREAM);
+            attachmentPart.setDataHandler(new DataHandler(new FileDataSource(attachment.filePath().toFile())));
             attachmentPart.setFileName(filename);
 
             multipart.addBodyPart(attachmentPart);
